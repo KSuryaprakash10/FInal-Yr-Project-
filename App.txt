@@ -1,0 +1,163 @@
+[7:01 pm, 25/5/2024] Surya Prakash {Naarayanan}: `timescale 1ns / 1ns
+module top(clk,rst);
+parameter WIDTH = 512, HEIGHT = 512;
+parameter length = WIDTH*HEIGHT*3;
+input clk;
+input rst;
+reg [7:0] mem [0:length-1];
+reg [7:0] R,G,B;
+//input [7:0] R,G,B;
+wire [16:1] sR,sG,sB;
+integer i;
+initial begin
+$readmemh("Lenna_hex.txt",mem,0,length-1);
+i = 0;
+end
+always @(posedge clk) begin
+if(i < length) begin
+R <= mem[i];
+G <= mem[i+1];
+B <= mem[i+2];
+i = i + 3;
+//#400;
+end
+end
+[7:01 pm, 25/5/2024] Surya Prakash {Naarayanan}: mlam_ec_8x8 mulR(R,R,sR);
+mlam_ec_8x8 mulG(G,G,sG);
+mlam_ec_8x8 mulB(B,B,sB);
+always @(*) begin
+#1;
+$display("@%0t:R= %h, G= %h, B= %h", $time,sR,sG,sB);
+end
+image_write image(clk,sR[16:9],sG[16:9],sB[16:9]);
+endmodule
+module image_write(input clk, input [7:0] R,G,B);
+parameter WIDTH = 512, HEIGHT = 512;
+parameter length = WIDTH*HEIGHT*3;
+integer fd;
+integer count;
+initial begin
+fd = $fopen("mlam_out.txt","w");
+count = 0;
+end
+always @(posedge clk) begin
+#1;
+$fwriteh(fd, R);
+[7:01 pm, 25/5/2024] Surya Prakash {Naarayanan}: $fwrite(fd,"\n");
+$fwriteh(fd, G);
+$fwrite(fd,"\n");
+$fwriteh(fd, B);
+$fwrite(fd,"\n");
+count = count + 3;
+if(count == length) begin
+$fclose(fd);
+$finish;
+end
+end
+endmodule
+module mlam_ec_8x8(a,b,out);
+input [7:0] a,b;
+output[16:1] out;
+wire [8:1] m0,m1,m2,m3,c,s;
+wire [32:1] p;
+wire [10:0] temp_carry;
+mlam_ac2_4x4 mf1(a[3:0],b[3:0],m0);
+assign out[4:1] = m0[4:1];
+assign p[8:5] = m0[8:5];
+mlam_ac2_4x4 mf2(a[3:0], b[7:4], m1);
+assign p[16:9] = m1[8:1];
+mlam_ac2_4x4 mf3(a[7:4], b[3:0], m2);
+[7:01 pm, 25/5/2024] Surya Prakash {Naarayanan}: assign p[24:16] = m2[8:1];
+mlam_ac2_4x4 mf4(a[7:4], b[7:4], m3);
+assign p[32:25] = m3[8:1];
+efa e4(p[5],p[9],p[17],c[1],s[1]);
+assign out[5] = s[1]; 
+efa e5(p[6],p[10],p[18],c[2],s[2]);
+efa e6(p[7],p[11],p[19],c[3],s[3]);
+efa e7(p[8],p[12],p[20],c[4],s[4]);
+efa e8(p[13],p[21],p[25],c[5],s[5]);
+efa e9(p[14],p[22],p[26],c[6],s[6]);
+efa e10(p[15],p[23],p[27],c[7],s[7]);
+efa e11(p[16],p[24],p[28],c[8],s[8]);
+efa e12(s[2],c[1],1'b0,temp_carry[0], out[6]);
+efa e13(s[3],c[2],temp_carry[0],temp_carry[1], out[7]);
+efa e14(s[4],c[3],temp_carry[1],temp_carry[2], out[8]);
+efa e15(s[5],c[4],temp_carry[2],temp_carry[3], out[9]);
+efa e16(s[6],c[5],temp_carry[3],temp_carry[4], out[10]);
+efa e17(s[7],c[6],temp_carry[4],temp_carry[5], out[11]);
+efa e18(s[8],c[7],temp_carry[5],temp_carry[6], out[12]);
+efa e19(p[29],c[8],temp_carry[6],temp_carry[7], out[13]);
+efa e20(p[30],1'b0,temp_carry[7],temp_carry[8], out[14]);
+efa e21(p[31],1'b0,temp_carry[8],temp_carry[9], out[15]);
+efa e22(p[32],1'b0,temp_carry[9],temp_carry[10], out[16]);
+endmodule
+module mlam_ac2_4x4(a,b,m);
+[7:02 pm, 25/5/2024] Surya Prakash {Naarayanan}: input [3:0] a,b;
+output[8:1] m;
+wire [4:1] comp;
+wire [12:1] pp;
+wire [5:1] i0,i1,i2,i3;
+wire [4:1] carry, cout, sum;
+wire [3:1] temp_carr;
+mlam_pp_4x4 f1(a,b,pp,comp);
+assign m[1] = pp[1];
+assign m[2] = pp[2];
+assign i0 = {pp[3],pp[4],pp[7],1'b0,1'b0};
+mlac22 z1(i0, cout[1], carry[1], sum[1]);
+assign i1={pp[5], pp[8], comp[2], comp[3],carry[1]};
+mlac22 z2(i1, cout[2], carry[2], sum[2]);
+assign i2={pp[6], pp[9], pp[10], 1'b0, 1'b0};
+mlac22 z3(i2, cout[3], carry[3], sum[3]);
+assign i3={pp[11], comp[4],1'b0,1'b0,1'b0};
+mlac22 z4(i3, cout[4], carry[4], sum[4]);
+assign m[3] = sum[1];
+assign m[4] = sum[2];
+efa e1(sum[3], carry[3], carry[2], temp_carr[1], m[5]);
+efa e2(sum[4],1'b0,temp_carr[1],temp_carr[2], m[6]);
+efa e3(pp[12], carry[4], temp_carr[2], temp_carr[3],m[7]);
+assign m[8] = temp_carr[3];
+endmodule
+[7:02 pm, 25/5/2024] Surya Prakash {Naarayanan}: module mlam_pp_4x4(a,b,pp,comp);
+input [3:0] a, b;
+output [12:1] pp;
+output [4:1] comp;
+mlam_pp_2x2 t1(a[0],a[1],b[0],b[1],pp[1],pp[2],pp[3],comp[1]);
+mlam_pp_2x2 t2(a[0],a[1],b[2],b[3],pp[4],pp[5],pp[6],comp[2]);
+mlam_pp_2x2 t3(a[2],a[3],b[0],b[1],pp[7],pp[8],pp[9],comp[3]);
+mlam_pp_2x2 t4(a[2],a[3],b[2],b[3],pp[10],pp[11],pp[12],comp[4]);
+endmodule
+module mlac22(p,cout,carry,sum);
+input [5:1] p;
+output cout,carry,sum;
+wire t0,t1,t2;
+assign cout = p[1];
+assign t0 = ~p[1];
+majority m5(t0,p[2],p[3],t1);
+assign carry = t1;
+assign t2 = ~t1;
+majority m6(p[5],p[4],t2,sum);
+endmodule
+module mlam_pp_2x2(a0,a1,b0,b1,out0,out1,out2,comp);
+input a0,a1,b0,b1;
+output out0, out1, out2, comp;
+majority m1(a0,b0,1'b0,out0);
+majority m2(a0,b1,1'b0,out1);
+[7:03 pm, 25/5/2024] Surya Prakash {Naarayanan}: majority m3(a1,b1,1'b0,out2);
+majority m4(a1,b0,1'b0,comp);
+endmodule
+module efa(a,b,cin,cout,sum);
+input a,b,cin;
+output cout,sum;
+wire t0,t1,t2,t3;
+assign t0 = ~cin;
+majority m7(a,b,t0, t1);
+majority m8(a,b,cin, t2);
+assign cout = t2;
+assign t3 = ~t2;
+majority m9(cin,t1,t3,sum);
+endmodule
+module majority(a,b,c,out);
+input a,b,c;
+output out;
+assign out = a&b | b&c | c&a;
+endmodule
